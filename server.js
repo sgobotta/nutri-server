@@ -6,7 +6,7 @@ var mongoose    = require('mongoose');
 var passport    = require('passport');
 var config      = require('./config/database'); // get db config file
 var User        = require('./app/models/user'); // get the mongoose model
-var port        = process.env.PORT || 8081;
+var port        = process.env.PORT || 8082;
 var jwt         = require('jwt-simple');
 var async       = require('async');
 var crypto      = require('crypto');
@@ -15,8 +15,6 @@ var crypto      = require('crypto');
 // https://github.com/sendgrid/sendgrid-nodejs
 /*var helper = require('sendgrid').mail;*/
 var sg = require('sendgrid')(process.env.SENDGRID_API_KEY);
-
-
 
 // Get our request parameters
 app.use(bodyParser.urlencoded({ extended: false }));
@@ -34,27 +32,19 @@ app.use(morgan('dev'));
 // Uses the passport package in our application
 app.use(passport.initialize());
  
-// Demo Route: (GET http://localhost:8080)
+// Demo Route: (GET http://localhost:8081)
 app.get('/', function(req, res) {
   res.send('Hello! The API is at http://localhost:' + port + '/api');
 });
 
-
+// Static Route
 app.use('/static', express.static(__dirname + '/app/public'));
 
 // Starts the server
 app.listen(port);
 console.log('There will be dragons: http://localhost:' + port);
 
-/*sg.API(request, function(error, response) {
-  console.log(response.statusCode);
-  console.log(response.body);
-  console.log(response.headers);
-})*/
 
-
-// demo Route (GET http://localhost:8080)
-// ...
  
 // connect to database
 mongoose.connect(config.database);
@@ -124,8 +114,11 @@ apiRoutes.post('/recover', function(req, res, next){
     function(token, done) {
       User.findOne({email: req.body.email}, function(err, user){
         if(!user){
-          res.send({success: false, msg: "We're sorry, no users matched the provided email. "})
-          return res.redirect('recover')
+          res.send({  success: false, 
+                      msg: "lala" })
+/*                      msg:  "We're sorry, no users matched the provided email: '" +
+                            req.body.email + 
+                            "'. Please make sure this is the email address you registered with."})*/
         }
         
         user.resetPasswordToken = token
@@ -138,12 +131,14 @@ apiRoutes.post('/recover', function(req, res, next){
       });
     },
     function(token, user, done){
-
+/*
       var content = 'Hello, ' + user.name + '\n\n' +
                     'You are receiving this because you (or someone else) have requested the reset of the password for your account.\n\n' +
                     'Please click on the following link, or paste this into your browser to complete the process:\n\n' +
                     'http://' + req.headers.host + '/reset/' + token + '\n\n' +
                     'If you did not request this, please ignore this email and your password will remain unchanged.\n'
+*/
+      var content = 'http://localhost:8080/#/outside/reset/' + token + '\n\n'
 
       var request = sg.emptyRequest({
         method: 'POST',
@@ -152,7 +147,7 @@ apiRoutes.post('/recover', function(req, res, next){
           personalizations: [
             {
               to: [{ email: user.email }],
-              subject: 'Marina N Vazquez Nutrición: password change request',
+              subject: '[Marina N Vazquez Nutrición]: password change request',
             }
           ],
           from: { email: 'password-change-request@marinanvazquez.com' },
@@ -164,65 +159,51 @@ apiRoutes.post('/recover', function(req, res, next){
         .then(response => {
         console.log(response.statusCode)
         console.log(response.body)
-        console.log(response.headers)        
+        console.log(response.headers)
         res.send({ success: true, msg: "An e-mail has been sent to " + user.email + ' with further instructions.' })
       }).catch(error => {
         console.log(error.response.statusCode)
         done(error, 'done');
       })
-      /*done(error, 'done');*/
-
-/*      sg.API(request, function(error,response){
-        if(error){
-          console.log('Sengrid error response received')
-        } else {
-          res.send({ success: true, msg: "An e-mail has been sent to " + user.email + ' with further instructions.' })
-        }
-        console.log(response.statusCode)
-        console.log(response.body)
-        console.log(response.headers)*/
     }
   ], 
   function(err){
     if(err) return next(err)
-    console.log('redirecting from post recover')
-    res.redirect('/forgot')
+
+    res.redirect('/login')
   })
 })
 
 apiRoutes.get('/reset/:token', function(req, res){
+
   User.findOne({
     resetPasswordToken: req.params.token,
     resetPasswordExpires: { $gt: Date.now() }
   }, function(err, user){
     if(!user){
-      res.send({success:false, msg: 'Password reset token is invalid or has expired.'})
+      res.send({success:false, msg: 'Password reset token is invalid or has expired. Please try again.'})
     } else {
-      res.send({success:true, msg: 'Redirecting to reset page.'})
+      res.send({success:true, msg: 'Please provide a new password.'})
     }
   })
 })
 
-apiRoutes.post('/reset/:token', function(req,res){
+apiRoutes.post('/reset', function(req,res){
   async.waterfall([
     function(done){
       User.findOne({
-        resetPasswordToken: req.params.token,
+        resetPasswordToken: req.body.user.token,
         resetPasswordExpires: { $gt: Date.now() }
       },
       function(err, user) {
         if(!user) {
           res.send({success: false, msg: 'Password reset token is invalid or has expired.'})
         } else {
-
-          user.password = req.body.password
+          user.password = req.body.user.password
           user.resetPasswordToken = undefined
           user.resetPasswordExpires = undefined
-
           user.save(function(err){
-            req.logIn(user, function(err){
-              done(err, user)
-            })
+            done(err,user)
           })
         }
       })
@@ -252,7 +233,7 @@ apiRoutes.post('/reset/:token', function(req,res){
         console.log(response.statusCode)
         console.log(response.body)
         console.log(response.headers)        
-        res.send({ success: true, msg: 'Success ' + user.name + '! Your password has been changed' })
+        res.send({ success: true, msg: 'Success ' + user.name + '! Your password has been changed.\n\n Please log in to continue.' })
       }).catch(error => {
         console.log(error.response.statusCode)
         done(error, 'done');
