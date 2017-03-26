@@ -1,15 +1,16 @@
-var express     = require('express');
-var app         = express();
-var bodyParser  = require('body-parser');
-var morgan      = require('morgan');
-var mongoose    = require('mongoose');
-var passport    = require('passport');
-var config      = require('./config/database'); // get db config file
-var User        = require('./app/models/user'); // get the mongoose model
-var port        = process.env.PORT || 8082;
-var jwt         = require('jwt-simple');
-var async       = require('async');
-var crypto      = require('crypto');
+var express      = require('express');
+var app          = express();
+var bodyParser   = require('body-parser');
+var morgan       = require('morgan');
+var mongoose     = require('mongoose');
+var passport     = require('passport');
+var config       = require('./config/database'); // get db config file
+var User         = require('./app/models/user'); // get the mongoose model
+var port         = process.env.PORT || 8082;
+var jwt          = require('jwt-simple');
+var async        = require('async');
+var crypto       = require('crypto');
+var MailingModel = require('./app/models/mailing')
  
 // using SendGrid's v3 Node.js Library
 // https://github.com/sendgrid/sendgrid-nodejs
@@ -43,8 +44,6 @@ app.use('/static', express.static(__dirname + '/app/public'));
 // Starts the server
 app.listen(port);
 console.log('There will be dragons: http://localhost:' + port);
-
-
  
 // connect to database
 mongoose.connect(config.database);
@@ -73,7 +72,7 @@ apiRoutes.post('/signup', function(req, res) {
       if(err) {
         return res.json({success: false, msg: 'Mail already exists.'});
       }
-      res.json({success: true, msg: 'Successful created new user.'});
+      res.json({success: true, msg: 'Successfully created new user.'});
     });
   }
 });
@@ -115,10 +114,9 @@ apiRoutes.post('/recover', function(req, res, next){
       User.findOne({email: req.body.email}, function(err, user){
         if(!user){
           res.send({  success: false, 
-                      msg: "lala" })
-/*                      msg:  "We're sorry, no users matched the provided email: '" +
+                      msg:  "We're sorry, no users matched the provided email: '" +
                             req.body.email + 
-                            "'. Please make sure this is the email address you registered with."})*/
+                            "'. Please make sure this is the email address you registered with."})
         }
         
         user.resetPasswordToken = token
@@ -131,14 +129,9 @@ apiRoutes.post('/recover', function(req, res, next){
       });
     },
     function(token, user, done){
-/*
-      var content = 'Hello, ' + user.name + '\n\n' +
-                    'You are receiving this because you (or someone else) have requested the reset of the password for your account.\n\n' +
-                    'Please click on the following link, or paste this into your browser to complete the process:\n\n' +
-                    'http://' + req.headers.host + '/reset/' + token + '\n\n' +
-                    'If you did not request this, please ignore this email and your password will remain unchanged.\n'
-*/
-      var content = 'http://localhost:8080/#/outside/reset/' + token + '\n\n'
+
+      var destUrl = 'http://localhost:8080/#/outside/reset/' + token
+      var content = MailingModel.recoveryNotification.content(user.name, destUrl)
 
       var request = sg.emptyRequest({
         method: 'POST',
@@ -147,10 +140,10 @@ apiRoutes.post('/recover', function(req, res, next){
           personalizations: [
             {
               to: [{ email: user.email }],
-              subject: '[Marina N Vazquez Nutrición]: password change request',
+              subject: MailingModel.recoveryNotification.subject(),
             }
           ],
-          from: { email: 'password-change-request@marinanvazquez.com' },
+          from: { email: MailingModel.recoveryNotification.from() },
           content: [{ type: 'text/plain', value: content }]
         }
       })
@@ -170,7 +163,6 @@ apiRoutes.post('/recover', function(req, res, next){
   function(err){
     if(err) return next(err)
 
-    res.redirect('/login')
   })
 })
 
@@ -210,9 +202,7 @@ apiRoutes.post('/reset', function(req,res){
     },
     function(user, done){
 
-      var content = 'This is a confirmation that the password for your account' +
-                    user.email + 'has just been changed.\n'
-
+      var content = MailingModel.recoveryConfirmation.content(user.email)
       var request = sg.emptyRequest({
         method: 'POST',
         path: '/v3/mail/send',
@@ -220,10 +210,10 @@ apiRoutes.post('/reset', function(req,res){
           personalizations: [
             {
               to: [{ email: user.email }],
-              subject: 'Marina N Vazquez Nutrición: password reset confirmation',
+              subject: MailingModel.recoveryConfirmation.subject(),
             }
           ],
-          from: { email: 'password-reset@marinanvazquez.com' },
+          from: { email: MailingModel.recoveryConfirmation.from() },
           content: [ {type: 'text/plain', value: content }]
         }
       })
@@ -242,7 +232,7 @@ apiRoutes.post('/reset', function(req,res){
     }
   ],
   function(err){
-    console.log('redirecting from post reset dash token')
+    
   })
 });
 
